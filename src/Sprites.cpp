@@ -148,11 +148,10 @@ void Sprites::drawBitmap(int16_t x, int16_t y,
             Arduboy2Base::sBuffer[ofs] = data;
           }
           if (yOffset != 0 && sRow < 7) {
-            const size_t index = static_cast<uint16_t>(ofs + WIDTH);
-            data = Arduboy2Base::sBuffer[index];
-            data &= (uint8_t)(mask_data >> 8);
-            data |= (uint8_t)(bitmap_data >> 8);
-            Arduboy2Base::sBuffer[index] = data;
+            data = Arduboy2Base::sBuffer[ofs + WIDTH];
+            data &= (*((unsigned char *) (&mask_data) + 1));
+            data |= (*((unsigned char *) (&bitmap_data) + 1));
+            Arduboy2Base::sBuffer[ofs + WIDTH] = data;
           }
           ofs++;
           bofs++;
@@ -171,8 +170,7 @@ void Sprites::drawBitmap(int16_t x, int16_t y,
             Arduboy2Base::sBuffer[ofs] |= (uint8_t)(bitmap_data);
           }
           if (yOffset != 0 && sRow < 7) {
-            const size_t index = static_cast<uint16_t>(ofs + WIDTH);
-            Arduboy2Base::sBuffer[index] |= (uint8_t)(bitmap_data >> 8);
+            Arduboy2Base::sBuffer[ofs + WIDTH] |= (*((unsigned char *) (&bitmap_data) + 1));
           }
           ofs++;
           bofs++;
@@ -191,8 +189,7 @@ void Sprites::drawBitmap(int16_t x, int16_t y,
             Arduboy2Base::sBuffer[ofs]  &= ~(uint8_t)(bitmap_data);
           }
           if (yOffset != 0 && sRow < 7) {
-            const size_t index = static_cast<uint16_t>(ofs + WIDTH);
-            Arduboy2Base::sBuffer[index] &= ~(uint8_t)(bitmap_data >> 8);
+            Arduboy2Base::sBuffer[ofs + WIDTH] &= ~(*((unsigned char *) (&bitmap_data) + 1));
           }
           ofs++;
           bofs++;
@@ -226,11 +223,10 @@ void Sprites::drawBitmap(int16_t x, int16_t y,
             Arduboy2Base::sBuffer[ofs] = data;
           }
           if (yOffset != 0 && sRow < 7) {
-            const size_t index = static_cast<uint16_t>(ofs + WIDTH);
-            data = Arduboy2Base::sBuffer[index];
-            data &= (uint8_t)(mask_data >> 8);
-            data |= (uint8_t)(bitmap_data >> 8);
-            Arduboy2Base::sBuffer[index] = data;
+            data = Arduboy2Base::sBuffer[ofs + WIDTH];
+            data &= (*((unsigned char *) (&mask_data) + 1));
+            data |= (*((unsigned char *) (&bitmap_data) + 1));
+            Arduboy2Base::sBuffer[ofs + WIDTH] = data;
           }
           ofs++;
           mask_ofs++;

@@ -8,13 +8,12 @@
 #define ARDUBOY2_H
 
 #include <Arduino.h>
-#include <EEPROM.h>
 #include "Arduboy2Core.h"
-#include "Arduboy2Audio.h"
-#include "Arduboy2Beep.h"
 #include "Sprites.h"
 #include "SpritesB.h"
 #include <Print.h>
+#include <limits.h>
+
 
 /** \brief
  * Library version
@@ -30,39 +29,30 @@
  * \code{.cpp}
  * // If the library is version 2.1.0 or higher
  * #if ARDUBOY_LIB_VER >= 20100
- *   // ... code that makes use of a new feature added to V2.1.0
+ *   // ... code that make use of a new feature added to V2.1.0
  * #endif
  * \endcode
  */
-#define ARDUBOY_LIB_VER 50300
+#define ARDUBOY_LIB_VER 50100
 
 // EEPROM settings
-/** \brief
- * The maximum number of characters in an unterminated unit name.
- *
- * \details
- * This value represents the maximum number of characters in a unit name
- * **NOT including** the necessary null character required to store the
- * unit name as a C-style null-terminated string. To specify the size of a
- * `char` array large enough to store a null-terminated string holding a
- * unit name, please use `ARDUBOY_UNIT_NAME_BUFFER_SIZE` instead.
- *
- * \see ARDUBOY_UNIT_NAME_BUFFER_SIZE
- */
-#define ARDUBOY_UNIT_NAME_LEN 6
+#define ARDUBOY_UNIT_NAME_LEN 6 /**< The maximum length of the unit name string. */
 
-/** \brief
- * The mininum number of characters required to store a
- * null-terminated unit name.
- *
- * \details
- * This value should be used to specify the size of a `char` array large enough
- * to store a C-style null-terminated string holding a unit name.
- *
- * \see Arduboy2Base::readUnitName() Arduboy2Base::writeUnitName()
- * ARDUBOY_UNIT_NAME_LEN
- */
-#define ARDUBOY_UNIT_NAME_BUFFER_SIZE (ARDUBOY_UNIT_NAME_LEN + 1)
+#define EEPROM_VERSION 0
+#define EEPROM_SYS_FLAGS 1
+#define EEPROM_AUDIO_ON_OFF 2
+#define EEPROM_UNIT_ID 8    // A uint16_t binary unit ID
+#define EEPROM_UNIT_NAME 10 // An up to 6 character unit name. Cannot contain
+                            // 0x00 or 0xFF. Lengths less than 6 are padded
+                            // with 0x00
+
+// EEPROM_SYS_FLAGS values
+#define SYS_FLAG_UNAME 0           // Display the unit name on the logo screen
+#define SYS_FLAG_UNAME_MASK _BV(SYS_FLAG_UNAME)
+#define SYS_FLAG_SHOW_LOGO 1       // Show the logo sequence during boot up
+#define SYS_FLAG_SHOW_LOGO_MASK _BV(SYS_FLAG_SHOW_LOGO)
+#define SYS_FLAG_SHOW_LOGO_LEDS 2  // Flash the RGB led during the boot logo
+#define SYS_FLAG_SHOW_LOGO_LEDS_MASK _BV(SYS_FLAG_SHOW_LOGO_LEDS)
 
 /** \brief
  * Start of EEPROM storage space for sketches.
@@ -95,10 +85,6 @@
 #define CLEAR_BUFFER true /**< Value to be passed to `display()` to clear the screen buffer. */
 
 
-//=============================================
-//========== Rect (rectangle) object ==========
-//=============================================
-
 /** \brief
  * A rectangle object for collision functions.
  *
@@ -107,7 +93,6 @@
  * given width and height.
  *
  * \see Arduboy2Base::collide(Point, Rect) Arduboy2Base::collide(Rect, Rect)
- *      Point
  */
 struct Rect
 {
@@ -115,29 +100,7 @@ struct Rect
   int16_t y;      /**< The Y coordinate of the top left corner */
   uint8_t width;  /**< The width of the rectangle */
   uint8_t height; /**< The height of the rectangle */
-
-  /** \brief
-   * The default constructor
-   */
-  Rect() = default;
-
-  /** \brief
-   * The fully initializing constructor
-   *
-   * \param x The X coordinate of the top left corner. Copied to variable `x`.
-   * \param y The Y coordinate of the top left corner. Copied to variable `y`.
-   * \param width The width of the rectangle. Copied to variable `width`.
-   * \param height The height of the rectangle. Copied to variable `height`.
-   */
-  constexpr Rect(int16_t x, int16_t y, uint8_t width, uint8_t height)
-    : x(x), y(y), width(width), height(height)
-  {
-  }
 };
-
-//==================================
-//========== Point object ==========
-//==================================
 
 /** \brief
  * An object to define a single point for collision functions.
@@ -145,308 +108,28 @@ struct Rect
  * \details
  * The location of the point is given by X and Y coordinates.
  *
- * \see Arduboy2Base::collide(Point, Rect) Rect
+ * \see Arduboy2Base::collide(Point, Rect)
  */
 struct Point
 {
   int16_t x; /**< The X coordinate of the point */
   int16_t y; /**< The Y coordinate of the point */
-
-  /** \brief
-   * The default constructor
-   */
-  Point() = default;
-
-  /** \brief
-   * The fully initializing constructor
-   *
-   * \param x The X coordinate of the point. Copied to variable `x`.
-   * \param y The Y coordinate of the point. Copied to variable `y`.
-   */
-  constexpr Point(int16_t x, int16_t y)
-    : x(x), y(y)
-  {
-  }
 };
 
 //==================================
 //========== Arduboy2Base ==========
 //==================================
 
-/** \brief
- * The main functions provided for writing sketches for the Arduboy,
- * _minus_ text output.
- *
- * \details
- * This class in inherited by Arduboy2, so if text output functions are
- * required Arduboy2 should be used instead.
- *
- * \note
- * \parblock
- * An Arduboy2Audio class object named `audio` will be created by the
- * Arduboy2Base class, so there is no need for a sketch itself to create an
- * Arduboy2Audio object. Arduboy2Audio functions can be called using the
- * Arduboy2 or Arduboy2Base `audio` object.
- *
- * Example:
- *
- * \code{.cpp}
- * #include <Arduboy2.h>
- *
- * Arduboy2 arduboy;
- *
- * // Arduboy2Audio functions can be called as follows:
- *   arduboy.audio.on();
- *   arduboy.audio.off();
- * \endcode
- * \endparblock
- *
- * \note
- * \parblock
- * A friend class named _Arduboy2Ex_ is declared by this class. The intention
- * is to allow a sketch to create an _Arduboy2Ex_ class which would have access
- * to the private and protected members of the Arduboy2Base class. It is hoped
- * that this may eliminate the need to create an entire local copy of the
- * library, in order to extend the functionality, in most circumstances.
- * \endparblock
- *
- * \see Arduboy2
- */
 class Arduboy2Base : public Arduboy2Core
 {
  friend class Arduboy2Ex;
- friend class Arduboy2Audio;
 
  public:
   Arduboy2Base();
 
-  /** \brief
-   * An object created to provide audio control functions within this class.
-   *
-   * \details
-   * This object is created to eliminate the need for a sketch to create an
-   * Arduboy2Audio class object itself.
-   *
-   * \see Arduboy2Audio
-   */
-  Arduboy2Audio audio;
-
-  /** \brief
-   * Initialize the hardware, display the boot logo, provide boot utilities, etc.
-   *
-   * \details
-   * This function should be called once near the start of the sketch,
-   * usually in `setup()`, before using any other functions in this class.
-   * It initializes the display, displays the boot logo, provides "flashlight"
-   * and system control features and initializes audio control.
-   *
-   * \note
-   * To free up some code space for use by the sketch, `boot()` can be used
-   * instead of `begin()` to allow the elimination of some of the things that
-   * aren't really required, such as displaying the boot logo.
-   *
-   * \see boot()
-   */
   void begin();
 
-  /** \brief
-   * Turn the RGB LED and display fully on to act as a small flashlight/torch.
-   *
-   * \details
-   * Checks if the UP button is pressed and if so turns the RGB LED and all
-   * display pixels fully on. If the UP button is detected, this function
-   * does not exit. The Arduboy must be restarted after flashlight mode is used.
-   *
-   * This function is called by `begin()` and can be called by a sketch
-   * after `boot()`.
-   *
-   * \note
-   * \parblock
-   * This function also contains code to address a problem with uploading a new
-   * sketch, for sketches that interfere with the bootloader "magic number".
-   * This problem occurs with certain sketches that use large amounts of RAM.
-   * Being in flashlight mode when uploading a new sketch can fix this problem.
-   *
-   * Therefore, for sketches that potentially could cause this problem, and use
-   * `boot()` instead of `begin()`, it is recommended that a call to
-   * `flashlight()` be included after calling `boot()`. If program space is
-   * limited, `safeMode()` can be used instead of `flashlight()`.
-   * \endparblock
-   *
-   * \see begin() boot() safeMode()
-   */
-  void flashlight();
 
-  /** \brief
-   * Handle buttons held on startup for system control.
-   *
-   * \details
-   * This function is called by `begin()` and can be called by a sketch
-   * after `boot()`.
-   *
-   * Hold the B button when booting to enter system control mode.
-   * The B button must be held continuously to remain in this mode.
-   * Then, pressing other buttons will perform system control functions:
-   *
-   * - UP: Set "sound enabled" in EEPROM
-   * - DOWN: Set "sound disabled" (mute) in EEPROM
-   *
-   * \see begin() boot()
-   */
-  void systemButtons();
-
-  /** \brief
-   * Display the boot logo sequence using `drawBitmap()`.
-   *
-   * \details
-   * This function is called by `begin()` and can be called by a sketch
-   * after `boot()`.
-   *
-   * The Arduboy logo scrolls down from the top of the screen to the center
-   * while the RGB LEDs light in sequence.
-   *
-   * The `bootLogoShell()` helper function is used to perform the actual
-   * sequence. The documentation for `bootLogoShell()` provides details on how
-   * it operates.
-   *
-   * \see begin() boot() bootLogoShell() Arduboy2::bootLogoText()
-   */
-  void bootLogo();
-
-  /** \brief
-   * Display the boot logo sequence using `drawCompressed()`.
-   *
-   * \details
-   * This function can be called by a sketch after `boot()` as an alternative to
-   * `bootLogo()`. This may reduce code size if the sketch itself uses
-   * `drawCompressed()`.
-   *
-   * \see bootLogo() begin() boot()
-   */
-  void bootLogoCompressed();
-
-  /** \brief
-   * Display the boot logo sequence using `Sprites::drawSelfMasked()`.
-   *
-   * \details
-   * This function can be called by a sketch after `boot()` as an alternative to
-   * `bootLogo()`. This may reduce code size if the sketch itself uses
-   * `Sprites` class functions.
-   *
-   * \see bootLogo() begin() boot() Sprites
-   */
-  void bootLogoSpritesSelfMasked();
-
-  /** \brief
-   * Display the boot logo sequence using `Sprites::drawOverwrite()`.
-   *
-   * \details
-   * This function can be called by a sketch after `boot()` as an alternative to
-   * `bootLogo()`. This may reduce code size if the sketch itself uses
-   * `Sprites` class functions.
-   *
-   * \see bootLogo() begin() boot() Sprites
-   */
-  void bootLogoSpritesOverwrite();
-
-  /** \brief
-   * Display the boot logo sequence using `SpritesB::drawSelfMasked()`.
-   *
-   * \details
-   * This function can be called by a sketch after `boot()` as an alternative to
-   * `bootLogo()`. This may reduce code size if the sketch itself uses
-   * `SpritesB` class functions.
-   *
-   * \see bootLogo() begin() boot() SpritesB
-   */
-  void bootLogoSpritesBSelfMasked();
-
-  /** \brief
-   * Display the boot logo sequence using `SpritesB::drawOverwrite()`.
-   *
-   * \details
-   * This function can be called by a sketch after `boot()` as an alternative to
-   * `bootLogo()`. This may reduce code size if the sketch itself uses
-   * `SpritesB` class functions.
-   *
-   * \see bootLogo() begin() boot() SpritesB
-   */
-  void bootLogoSpritesBOverwrite();
-
-  /** \brief
-   * Display the boot logo sequence using the provided function
-   *
-   * \param drawLogo A reference to a function which will draw the boot logo
-   * at the given Y position.
-   *
-   * \details
-   * This common function executes the sequence to display the boot logo.
-   * It is called by `bootLogo()` and other similar functions which provide it
-   * with a reference to a function which will do the actual drawing of the
-   * logo.
-   *
-   * This function calls `bootLogoExtra()` after the logo stops scrolling down,
-   * which derived classes can implement to add additional information to the
-   * logo screen. The `Arduboy2` class uses this to display the unit name.
-   *
-   * If the RIGHT button is pressed while the logo is scrolling down,
-   * the boot logo sequence will be aborted. This can be useful for
-   * developers who wish to quickly start testing, or anyone else who is
-   * impatient and wants to go straight to the actual sketch.
-   *
-   * If the "Show LEDs with boot logo" flag in system EEPROM is cleared,
-   * the RGB LEDs will not be flashed during the logo display sequence.
-   *
-   * If the "Show Boot Logo" flag in system EEPROM is cleared, this function
-   * will return without executing the logo display sequence.
-   *
-   * The prototype for the function provided to draw the logo is:
-   *
-   * \code{.cpp}
-   * void drawLogo(int16_t y);
-   * \endcode
-   *
-   * The y parameter is the Y offset for the top of the logo. It is expected
-   * that the logo will be 16 pixels high and centered horizontally. This will
-   * result in the logo stopping in the middle of the screen at the end of the
-   * sequence. If the logo height is not 16 pixels, the Y value can be adjusted
-   * to compensate.
-   *
-   * \see bootLogo() boot() Arduboy2::bootLogoExtra()
-   */
-  void bootLogoShell(void (*drawLogo)(int16_t));
-
-  // Called by bootLogoShell() to allow derived classes to display additional
-  // information after the logo stops scrolling down.
-  virtual void bootLogoExtra();
-
-  /** \brief
-   * Wait until all buttons have been released.
-   *
-   * \details
-   * This function is called by `begin()` and can be called by a sketch
-   * after `boot()`.
-   *
-   * It won't return unless no buttons are being pressed. A short delay is
-   * performed each time before testing the state of the buttons to do a
-   * simple button debounce.
-   *
-   * This function is called at the end of `begin()` to make sure no buttons
-   * used to perform system start up actions are still being pressed, to
-   * prevent them from erroneously being detected by the sketch code itself.
-   *
-   * \see begin() boot()
-   */
-  void waitNoButtons();
-
-  /** \brief
-   * Clear the display buffer.
-   *
-   * \details
-   * The entire contents of the screen buffer are cleared to BLACK.
-   *
-   * \see display(bool)
-   */
   void clear();
 
   /** \brief
@@ -492,7 +175,7 @@ class Arduboy2Base : public Arduboy2Core
    * specified color. The values WHITE or BLACK can be used for the color.
    * If the `color` parameter isn't included, the pixel will be set to WHITE.
    */
-  static void drawPixel(int16_t x, int16_t y, uint8_t color = WHITE);
+  void drawPixel(int16_t x, int16_t y, uint8_t color = WHITE);
 
   /** \brief
    * Returns the state of the given pixel in the screen buffer.
@@ -514,6 +197,10 @@ class Arduboy2Base : public Arduboy2Core
    */
   void drawCircle(int16_t x0, int16_t y0, uint8_t r, uint8_t color = WHITE);
 
+  // Draw one or more "corners" of a circle.
+  // (Not officially part of the API)
+  void drawCircleHelper(int16_t x0, int16_t y0, uint8_t r, uint8_t corners, uint8_t color = WHITE);
+
   /** \brief
    * Draw a filled-in circle of a given radius.
    *
@@ -523,6 +210,11 @@ class Arduboy2Base : public Arduboy2Core
    * \param color The circle's color (optional; defaults to WHITE).
    */
   void fillCircle(int16_t x0, int16_t y0, uint8_t r, uint8_t color = WHITE);
+
+  // Draw one or both vertical halves of a filled-in circle or
+  // rounded rectangle edge.
+  // (Not officially part of the API)
+  void fillCircleHelper(int16_t x0, int16_t y0, uint8_t r, uint8_t sides, int16_t delta, uint8_t color = WHITE);
 
   /** \brief
    * Draw a line between two specified points.
@@ -700,19 +392,17 @@ class Arduboy2Base : public Arduboy2Core
    *              (optional; defaults to WHITE).
    *
    * \details
-   * Draw a bitmap starting at the given coordinates using an array that has
-   * been compressed using an RLE algorthm implemented by Team A.R.G.
+   * Draw a bitmap starting at the given coordinates from an array that has
+   * been compressed using an algorthm implemented by Team A.R.G.
+   * For more information see:
+   * https://github.com/TEAMarg/drawCompressed
+   * https://github.com/TEAMarg/Cabi
    *
-   * Bits set to 1 in the provided bitmap array (after decoding) will have
-   * their corresponding pixel set to the specified color. For bits set to 0
-   * in the array, the corresponding pixel will be left unchanged.
+   * Bits set to 1 in the provided bitmap array will have their corresponding
+   * pixel set to the specified color. For bits set to 0 in the array, the
+   * corresponding pixel will be left unchanged.
    *
    * The array must be located in program memory by using the PROGMEM modifier.
-   *
-   * \note
-   * C source code for a command line program named `Cabi`, which can convert
-   * a PNG bitmap image file to source code suitable for use with
-   * `drawCompressed()`, is included in the `extras` directory of the library.
    */
   static void drawCompressed(int16_t sx, int16_t sy, const uint8_t *bitmap, uint8_t color = WHITE);
 
@@ -739,17 +429,18 @@ class Arduboy2Base : public Arduboy2Core
    * Seed the random number generator with a random value.
    *
    * \details
-   * The Arduino pseudorandom number generator is seeded with the random value
-   * returned from a call to `generateRandomSeed()`.
+   * The Arduino random number generator is seeded with a random value
+   * derived from entropy from an ADC reading of a floating pin combined with
+   * the microseconds since boot.
    *
-   * \note
-   * This function will be more effective if called after a semi-random time,
-   * such as after waiting for the user to press a button to start a game, or
-   * another event that takes a variable amount of time after boot.
-   *
-   * \see generateRandomSeed()
+   * This method is still most effective when called after a semi-random time,
+   * such as after a user hits a button to start a game or other semi-random
+   * event.
    */
   void initRandomSeed();
+
+  // Swap the values of two int16_t variables passed by reference.
+  void swap(int16_t& a, int16_t& b);
 
   /** \brief
    * Set the frame rate used by the frame control functions.
@@ -904,7 +595,7 @@ class Arduboy2Base : public Arduboy2Core
   int cpuLoad();
 
   /** \brief
-   * Test if the all of the specified buttons are pressed.
+   * Test if the specified buttons are pressed.
    *
    * \param buttons A bit mask indicating which buttons to test.
    * (Can be a single button)
@@ -912,39 +603,15 @@ class Arduboy2Base : public Arduboy2Core
    * \return `true` if *all* buttons in the provided mask are currently pressed.
    *
    * \details
-   * Read the state of the buttons and return `true` if all of the buttons in
-   * the specified mask are being pressed.
+   * Read the state of the buttons and return `true` if all the buttons in the
+   * specified mask are being pressed.
    *
-   * Example: `if (pressed(LEFT_BUTTON | A_BUTTON))`
+   * Example: `if (pressed(LEFT_BUTTON + A_BUTTON))`
    *
    * \note
    * This function does not perform any button debouncing.
-   *
-   * \see anyPressed() notPressed()
    */
   bool pressed(uint8_t buttons);
-
-  /** \brief
-   * Test if any of the specified buttons are pressed.
-   *
-   * \param buttons A bit mask indicating which buttons to test.
-   * (Can be a single button)
-   *
-   * \return `true` if *one or more* of the buttons in the provided mask are
-   * currently pressed.
-   *
-   * \details
-   * Read the state of the buttons and return `true` if one or more of the
-   * buttons in the specified mask are being pressed.
-   *
-   * Example: `if (anyPressed(RIGHT_BUTTON | LEFT_BUTTON))`
-   *
-   * \note
-   * This function does not perform any button debouncing.
-   *
-   * \see pressed() notPressed()
-   */
-  bool anyPressed(uint8_t buttons);
 
   /** \brief
    * Test if the specified buttons are not pressed.
@@ -963,8 +630,6 @@ class Arduboy2Base : public Arduboy2Core
    *
    * \note
    * This function does not perform any button debouncing.
-   *
-   * \see pressed() anyPressed()
    */
   bool notPressed(uint8_t buttons);
 
@@ -1067,7 +732,7 @@ class Arduboy2Base : public Arduboy2Core
    *
    * \see Point Rect
    */
-  static bool collide(Point point, Rect rect);
+  bool collide(Point point, Rect rect);
 
   /** \brief
    * Test if a rectangle is intersecting with another rectangle.
@@ -1084,7 +749,7 @@ class Arduboy2Base : public Arduboy2Core
    *
    * \see Rect
    */
-  static bool collide(Rect rect1, Rect rect2);
+  bool collide(Rect rect1, Rect rect2);
 
   /** \brief
    * Read the unit ID from system EEPROM.
@@ -1097,227 +762,6 @@ class Arduboy2Base : public Arduboy2Core
    * uniquely identified.
    *
    * \see writeUnitID() readUnitName()
-   */
-  uint16_t readUnitID();
-
-  /** \brief
-   * Write a unit ID to system EEPROM.
-   *
-   * \param id The value of the unit ID to be stored in system EEPROM.
-   *
-   * \details
-   * This function writes a unit ID to a reserved location in system EEPROM.
-   * The ID can be any value. It is intended to allow different units to be
-   * uniquely identified.
-   *
-   * \see readUnitID() writeUnitName()
-   */
-  void writeUnitID(uint16_t id);
-
-  /** \brief
-   * Read the unit name from system EEPROM.
-   *
-   * \param name A pointer to the first element of a `char` array in which the
-   * unit name will be written. The name will be up to `ARDUBOY_UNIT_NAME_LEN`
-   * characters in length and additionally terminated with a null (0x00)
-   * character, so **the provided array MUST be at least
-   * `ARDUBOY_UNIT_NAME_BUFFER_SIZE` characters long**.
-   * Using `ARDUBOY_UNIT_NAME_BUFFER_SIZE` to specify the array length is the
-   * proper way to do this, although any array larger than
-   * `ARDUBOY_UNIT_NAME_BUFFER_SIZE` is also acceptable.
-   *
-   * \return  The length of the string (between 0 and
-   * `ARDUBOY_UNIT_NAME_LEN` *inclusive*).
-   *
-   * \details
-   * This function reads the unit name that has been set in system EEPROM.
-   * The name represents characters in the library's `font5x7` font. It can
-   * contain any values except 0xFF and the null (0x00) terminator value, plus
-   * the ASCII newline/line feed character (`\n`, 0x0A, inverse white circle)
-   * and ASCII carriage return character (`\r`, 0x0D, musical eighth note).
-   *
-   * The name can be used for any purpose. It could identify the owner or
-   * give the unit itself a nickname. A sketch could use it to automatically
-   * fill in a name or initials in a high score table, or display it as the
-   * "player" when the opponent is the computer.
-   *
-   * \note
-   * The defined value `ARDUBOY_UNIT_NAME_BUFFER_SIZE` should be used to
-   * allocate an array to hold the unit name string, instead of using a
-   * hard coded value for the size.
-   * For example, to allocate a buffer and read the unit name into it:
-   * \code{.cpp}
-   * // Buffer large enough to hold the unit name and a null terminator
-   * char unitName[ARDUBOY_UNIT_NAME_BUFFER_SIZE];
-   *
-   * // After the call, unitNameLength will contain the actual name length,
-   * // not including the null terminator.
-   * uint8_t unitNameLength = arduboy.readUnitName(unitName);
-   * \endcode
-   *
-   * \see writeUnitName() readUnitID() Arduboy2::bootLogoExtra()
-   * ARDUBOY_UNIT_NAME_BUFFER_SIZE ARDUBOY_UNIT_NAME_LEN Arduboy2::font5x7
-   */
-  uint8_t readUnitName(char* name);
-
-  /** \brief
-   * Write a unit name to system EEPROM.
-   *
-   * \param name A pointer to the first element of a C-style null-terminated
-   * string containing the unit name to be saved. The name can be up to
-   * `ARDUBOY_UNIT_NAME_LEN` characters long and must be terminated with a
-   * null (0x00) character.
-   *
-   * \details
-   * This function writes a unit name to a reserved area in system EEPROM.
-   * The name represents characters in the library's `font5x7` font. It can
-   * contain any values except 0xFF and the null (0x00) terminator value, plus
-   * the ASCII newline/line feed character (`\n`, 0x0A, inverse white circle)
-   * and ASCII carriage return character (`\r`, 0x0D, musical eighth note)
-   * because of their special use by the library's text handling functions.
-   *
-   * The name can be used for any purpose. It could identify the owner or
-   * give the unit itself a nickname. A sketch could use it to automatically
-   * fill in a name or initials in a high score table, or display it as the
-   * "player" when the opponent is the computer.
-   *
-   * \note
-   * The defined value `ARDUBOY_UNIT_NAME_BUFFER_SIZE` should be used to
-   * allocate an array to hold the unit name string, instead of using a
-   * hard coded value for the size.
-   *
-   * \see readUnitName() writeUnitID() Arduboy2::bootLogoExtra()
-   * ARDUBOY_UNIT_NAME_BUFFER_SIZE ARDUBOY_UNIT_NAME_LEN Arduboy2::font5x7
-   */
-  void writeUnitName(const char* name);
-
-  /** \brief
-   * Read the "Show Boot Logo" flag in system EEPROM.
-   *
-   * \return `true` if the flag is set to indicate that the boot logo sequence
-   * should be displayed. `false` if the flag is set to not display the
-   * boot logo sequence.
-   *
-   * \details
-   * The "Show Boot Logo" flag is used to determine whether the system
-   * boot logo sequence is to be displayed when the system boots up.
-   * This function returns the value of this flag.
-   *
-   * \see writeShowBootLogoFlag() bootLogo()
-   */
-  bool readShowBootLogoFlag();
-
-  /** \brief
-   * Write the "Show Boot Logo" flag in system EEPROM.
-   *
-   * \param val If `true` the flag is set to indicate that the boot logo
-   * sequence should be displayed. If `false` the flag is set to not display
-   * the boot logo sequence.
-   *
-   * \details
-   * The "Show Boot Logo" flag is used to determine whether the system
-   * boot logo sequence is to be displayed when the system boots up.
-   * This function allows the flag to be saved with the desired value.
-   *
-   * \see readShowBootLogoFlag() bootLogo()
-   */
-  void writeShowBootLogoFlag(bool val);
-
-  /** \brief
-   * Read the "Show Unit Name" flag in system EEPROM.
-   *
-   * \return `true` if the flag is set to indicate that the unit name should
-   * be displayed. `false` if the flag is set to not display the unit name.
-   *
-   * \details
-   * The "Show Unit Name" flag is used to determine whether the system
-   * unit name is to be displayed at the end of the boot logo sequence.
-   * This function returns the value of this flag.
-   *
-   * \see writeShowUnitNameFlag() writeUnitName() readUnitName()
-   * Arduboy2::bootLogoExtra()
-   */
-  bool readShowUnitNameFlag();
-
-  /** \brief
-   * Write the "Show Unit Name" flag in system EEPROM.
-   *
-   * \param val If `true` the flag is set to indicate that the unit name should
-   * be displayed. If `false` the flag is set to not display the unit name.
-   *
-   * \details
-   * The "Show Unit Name" flag is used to determine whether the system
-   * unit name is to be displayed at the end of the boot logo sequence.
-   * This function allows the flag to be saved with the desired value.
-   *
-   * \see readShowUnitNameFlag() writeUnitName() readUnitName()
-   * Arduboy2::bootLogoExtra()
-   */
-  void writeShowUnitNameFlag(bool val);
-
-  /** \brief
-   * Read the "Show LEDs with boot logo" flag in system EEPROM.
-   *
-   * \return `true` if the flag is set to indicate that the RGB LEDs should be
-   * flashed. `false` if the flag is set to leave the LEDs off.
-   *
-   * \details
-   * The "Show LEDs with boot logo" flag is used to determine whether the
-   * RGB LEDs should be flashed in sequence while the boot logo is being
-   * displayed. This function returns the value of this flag.
-   *
-   * \see writeShowBootLogoLEDsFlag()
-   */
-  bool readShowBootLogoLEDsFlag();
-
-  /** \brief
-   * Write the "Show LEDs with boot logo" flag in system EEPROM.
-   *
-   * \param val If `true` the flag is set to indicate that the RGB LEDs should
-   * be flashed. If `false` the flag is set to leave the LEDs off.
-   *
-   * \details
-   * The "Show LEDs with boot logo" flag is used to determine whether the
-   * RGB LEDs should be flashed in sequence while the boot logo is being
-   * displayed. This function allows the flag to be saved with the desired
-   * value.
-   *
-   * \see readShowBootLogoLEDsFlag()
-   */
-  void writeShowBootLogoLEDsFlag(bool val);
-
-  /** \brief
-   * A counter which is incremented once per frame.
-   *
-   * \details
-   * This counter is incremented once per frame when using the `nextFrame()`
-   * function. It will wrap to zero when it reaches its maximum value.
-   *
-   * It could be used to have an event occur for a given number of frames, or
-   * a given number of frames later, in a way that wouldn't be quantized the
-   * way that using `everyXFrames()` might.
-   *
-   * example:
-   * \code{.cpp}
-   * // move for 10 frames when right button is pressed, if not already moving
-   * if (!moving) {
-   *   if (arduboy.justPressed(RIGHT_BUTTON)) {
-   *     endMoving = arduboy.frameCount + 10;
-   *     moving = true;
-   *   }
-   * } else {
-   *   movePlayer();
-   *   if (arduboy.frameCount == endMoving) {
-   *     moving = false;
-   *   }
-   * }
-   * \endcode
-   *
-   * This counter could also be used to determine the number of frames that
-   * have elapsed between events but the possibility of the counter wrapping
-   * would have to be accounted for.
-   *
-   * \see nextFrame() everyXFrames()
    */
   uint16_t frameCount;
 
@@ -1335,29 +779,6 @@ class Arduboy2Base : public Arduboy2Core
    */
   static uint8_t sBuffer[(HEIGHT*WIDTH)/8];
 
-  /** \brief
-   * The bitmap for the ARDUBOY logo in `drawBitmap()` format.
-   *
-   * \see bootLogo() drawBitmap()
-   */
-  static const PROGMEM uint8_t arduboy_logo[];
-
-  /** \brief
-   * The bitmap for the ARDUBOY logo in `drawCompressed()` format.
-   *
-   * \see bootLogoCompressed() drawCompressed()
-   */
-  static const PROGMEM uint8_t arduboy_logo_compressed[];
-
-  /** \brief
-   * The bitmap for the ARDUBOY logo in `Sprites` class
-   * `drawSelfMasked()` or `drawOverwrite()` format.
-   *
-   * \see bootLogoSpritesSelfMasked() bootLogoSpritesOverwrite()
-   * bootLogoSpritesBSelfMasked() bootLogoSpritesBOverwrite()
-   */
-  static const PROGMEM uint8_t arduboy_logo_sprite[];
-
  protected:
   // helper function for sound enable/disable system control
   void sysCtrlSound(uint8_t buttons, uint8_t led, uint8_t eeVal);
@@ -1370,59 +791,15 @@ class Arduboy2Base : public Arduboy2Core
   static void drawLogoSpritesBSelfMasked(int16_t y);
   static void drawLogoSpritesBOverwrite(int16_t y);
 
-  // draw one or more "corners" of a circle
-  void drawCircleHelper(int16_t x0, int16_t y0, uint8_t r, uint8_t corners,
-                        uint8_t color = WHITE);
-
-  // draw one or both vertical halves of a filled-in circle or
-  // rounded rectangle edge
-  void fillCircleHelper(int16_t x0, int16_t y0, uint8_t r,
-                        uint8_t sides, int16_t delta, uint8_t color = WHITE);
-
-  // helper for drawCompressed()
-  struct BitStreamReader;
-
-  // swap the values of two int16_t variables passed by reference
-  void swapInt16(int16_t& a, int16_t& b);
-
   // For button handling
   uint8_t currentButtonState;
   uint8_t previousButtonState;
 
-  // For frame functions
+  // For frame funcions
   uint8_t eachFrameMillis;
   uint8_t thisFrameStart;
   bool justRendered;
   uint8_t lastFrameDurationMs;
-
-  // ----- Map of EEPROM addresses for system use-----
-
-  // EEPROM address 0 is reserved for bootloader use
-  // This library will not touch it
-
-    // Control flags
-  static constexpr uint16_t eepromSysFlags = 1;
-    // Audio mute control. 0 = audio off, non-zero = audio on
-  static constexpr uint16_t eepromAudioOnOff = 2;
-    // -- Addresses 3-7 are currently reserved for future use --
-    // A uint16_t binary unit ID
-  static constexpr uint16_t eepromUnitID = 8; // A uint16_t binary unit ID
-    // An up to 6 character unit name
-    // The name cannot contain 0x00, 0xFF, 0x0A, 0x0D
-    // Lengths less than 6 are padded with 0x00
-  static constexpr uint16_t eepromUnitName = 10;
-    // -- User EEPROM space starts at address 16 --
-
-  // --- map of the bits in the eepromSysFlags byte --
-    // Display the unit name on the logo screen
-  static constexpr uint8_t sysFlagUnameBit = 0;
-  static constexpr uint8_t sysFlagUnameMask = _BV(sysFlagUnameBit);
-    // Show the logo sequence during boot up
-  static constexpr uint8_t sysFlagShowLogoBit = 1;
-  static constexpr uint8_t sysFlagShowLogoMask = _BV(sysFlagShowLogoBit);
-    // Flash the RGB led during the boot logo
-  static constexpr uint8_t sysFlagShowLogoLEDsBit = 2;
-  static constexpr uint8_t sysFlagShowLogoLEDsMask = _BV(sysFlagShowLogoLEDsBit);
 };
 
 
@@ -1465,18 +842,10 @@ class Arduboy2 : public Print, public Arduboy2Base
    * as the Arduino `Serial.print()`, etc., functions.
    *
    * Print will use the `write()` function to actually draw each character
-   * in the screen buffer, using the library's `font5x7` font.
-   * Two character values are handled specially (and thus the font symbols that
-   * they represent can't be displayed):
-   *
-   * - ASCII newline or line feed (`\n`, 0x0A, inverse white circle).
-   *   This will move the text cursor position to the start of the next line,
-   *   based on the current text size.
-   * - ASCII carriage return (`\r`, 0x0D, musical eighth note).
-   *   This character will be ignored.
+   * in the screen buffer.
    *
    * See:
-   * https://www.arduino.cc/reference/en/language/functions/communication/serial/print/
+   * https://www.arduino.cc/en/Serial/Print
    *
    * Example:
    * \code{.cpp}
@@ -1484,15 +853,13 @@ class Arduboy2 : public Print, public Arduboy2Base
    *
    * arduboy.println("Hello World"); // Prints "Hello World" and then moves the
    *                                 // text cursor to the start of the next line
-   * arduboy.print(value);       // Prints "42"
-   * arduboy.print('\n');        // Moves the text cursor to the start of the next line
-   * arduboy.print(78, HEX);     // Prints "4E" (78 in hexadecimal)
-   * arduboy.print("\x03\xEA");  // Prints a heart symbol and a Greek uppercase omega
+   * arduboy.print(value);  // Prints "42"
+   * arduboy.print('\n');   // Moves the text cursor to the start of the next line
+   * arduboy.print(78, HEX) // Prints "4E" (78 in hexadecimal)
    * \endcode
    *
-   * \see Arduboy2::write() Arduboy2::font5x7
+   * \see Arduboy2::write()
    */
-  using Print::write;
 
   /** \brief
    * Display the boot logo sequence using printed text instead of a bitmap.
@@ -1515,88 +882,61 @@ class Arduboy2 : public Print, public Arduboy2Base
    * developers who wish to quickly start testing, or anyone else who is
    * impatient and wants to go straight to the actual sketch.
    *
-   * If the "Show LEDs with boot logo" flag in system EEPROM is cleared,
+   * If the SYS_FLAG_SHOW_LOGO_LEDS flag in system EEPROM is cleared,
    * the RGB LEDs will not be flashed during the logo display sequence.
    *
-   * If the "Show Boot Logo" flag in system EEPROM is cleared, this function
+   * If the SYS_FLAG_SHOW_LOGO flag in system EEPROM is cleared, this function
    * will return without executing the logo display sequence.
    *
    * \see bootLogo() boot() Arduboy2::bootLogoExtra()
    */
-  void bootLogoText();
+
 
   /** \brief
-   * Show the unit name at the bottom of the boot logo screen.
+   * Write a single ASCII character at the current text cursor location.
    *
-   * \details
-   * This function is called by `bootLogoShell()` and `bootLogoText()`.
-   *
-   * If a unit name has been saved in system EEPROM, it will be displayed at
-   * the bottom of the screen. This function pauses for a short time to allow
-   * the name to be seen.
-   *
-   * If the "Show Unit Name" flag in system EEPROM is cleared, this function
-   * will return without showing the unit name or pausing.
-   *
-   * \note
-   * This function would not normally be called directly from within a sketch
-   * itself.
-   *
-   * \see readUnitName() writeUnitName() bootLogo() bootLogoShell()
-   * bootLogoText() writeShowUnitNameFlag() begin()
-   */
-  virtual void bootLogoExtra();
-
-  /** \brief
-   * Write a single character at the current text cursor position.
-   *
-   * \param c The value of the character to be written.
+   * \param c The ASCII value of the character to be written.
    *
    * \return The number of characters written (will always be 1).
    *
    * \details
    * This is the Arduboy implemetation of the Arduino virtual `write()`
-   * function. The single character specified is written to the the screen
-   * buffer at the current text cursor position. The text cursor is then
+   * function. The single ASCII character specified is written to the
+   * the screen buffer at the current text cursor. The text cursor is then
    * moved to the next character position in the screen buffer. This new cursor
    * position will depend on the current text size and possibly the current
    * wrap mode.
    *
-   * Characters are rendered using the library's `font5x7` font.
-   * Two character values are handled specially (and thus the font symbols that
-   * they represent can't be displayed):
+   * Two special characters are handled:
    *
-   * - ASCII newline or line feed (`\n`, 0x0A, inverse white circle).
-   *   This will move the text cursor position to the start of the next line,
-   *   based on the current text size.
-   * - ASCII carriage return (`\r`, 0x0D, musical eighth note).
-   *   This character will be ignored.
+   * - The newline character `\n`. This will move the text cursor to the start
+   *   of the next line based on the current text size.
+   * - The carriage return character `\r`. This character will be ignored.
    *
    * \note
    * This function is rather low level and, although it's available as a public
    * function, it wouldn't normally be used. In most cases the Arduino Print
    * class should be used for writing text.
    *
-   * \see Print setTextSize() setTextWrap() drawChar()
+   * \see Print setTextSize() setTextWrap()
    */
   virtual size_t write(uint8_t);
 
   /** \brief
-   * Draw a single character at the specified location in the screen
+   * Draw a single ASCII character at the specified location in the screen
    * buffer.
    *
    * \param x The X coordinate, in pixels, for where to draw the character.
    * \param y The Y coordinate, in pixels, for where to draw the character.
-   * \param c The value of the character to be drawn.
+   * \param c The ASCII value of the character to be drawn.
    * \param color the forground color of the character.
    * \param bg the background color of the character.
    * \param size The size of the character to draw.
    *
    * \details
-   * The specified character is drawn starting at the provided
+   * The specified ASCII character is drawn starting at the provided
    * coordinate. The point specified by the X and Y coordinates will be the
-   * top left corner of the character. The character will be rendered using the
-   * library's `font5x7` font.
+   * top left corner of the character.
    *
    * \note
    * This is a low level function used by the `write()` function to draw a
@@ -1605,59 +945,26 @@ class Arduboy2 : public Print, public Arduboy2Base
    * writing text.
    *
    * \see Print write() setTextColor() setTextBackground() setTextSize()
-   * font5x7
    */
   void drawChar(int16_t x, int16_t y, unsigned char c, uint8_t color, uint8_t bg, uint8_t size);
 
   /** \brief
    * Set the location of the text cursor.
    *
-   * \param x The X (horizontal) coordinate, in pixels, for the new location of
-   * the text cursor.
-   * \param y The Y (vertical) coordinate, in pixels, for the new location of
-   * the text cursor.
+   * \param x The X coordinate, in pixels, for the new location of the text cursor.
+   * \param y The Y coordinate, in pixels, for the new location of the text cursor.
    *
    * \details
    * The location of the text cursor is set the the specified coordinates.
    * The coordinates are in pixels. Since the coordinates can specify any pixel
    * location, the text does not have to be placed on specific rows.
    * As with all drawing functions, location 0, 0 is the top left corner of
-   * the display. The cursor location represents the top left corner of the
-   * next character written.
+   * the display. The cursor location will be the top left corner of the next
+   * character written.
    *
-   * \see setCursorX() setCursorY() getCursorX() getCursorY()
+   * \see getCursorX() getCursorY()
    */
   void setCursor(int16_t x, int16_t y);
-
-  /** \brief
-   * Set the X coordinate of the text cursor location.
-   *
-   * \param x The X (horizontal) coordinate, in pixels, for the new location of
-   * the text cursor.
-   *
-   * \details
-   * The X coordinate for the location of the text cursor is set to the
-   * specified value, leaving the Y coordinate unchanged. For more details
-   * about the text cursor, see the `setCursor()` function.
-   *
-   * \see setCursor() setCursorY() getCursorX() getCursorY()
-   */
-  void setCursorX(int16_t x);
-
-  /** \brief
-   * Set the Y coordinate of the text cursor location.
-   *
-   * \param y The Y (vertical) coordinate, in pixels, for the new location of
-   * the text cursor.
-   *
-   * \details
-   * The Y coordinate for the location of the text cursor is set to the
-   * specified value, leaving the X coordinate unchanged. For more details
-   * about the text cursor, see the `setCursor()` function.
-   *
-   * \see setCursor() setCursorX() getCursorX() getCursorY()
-   */
-  void setCursorY(int16_t y);
 
   /** \brief
    * Get the X coordinate of the current text cursor position.
@@ -1668,7 +975,7 @@ class Arduboy2 : public Print, public Arduboy2Base
    * The X coordinate returned is a pixel location with 0 indicating the
    * leftmost column.
    *
-   * \see getCursorY() setCursor() setCursorX() setCursorY()
+   * \see getCursorY() setCursor()
    */
   int16_t getCursorX();
 
@@ -1681,7 +988,7 @@ class Arduboy2 : public Print, public Arduboy2Base
    * The Y coordinate returned is a pixel location with 0 indicating the
    * topmost row.
    *
-   * \see getCursorX() setCursor() setCursorX() setCursorY()
+   * \see getCursorX() setCursor()
    */
   int16_t getCursorY();
 
@@ -1758,7 +1065,7 @@ class Arduboy2 : public Print, public Arduboy2Base
    * cursor will be moved to the start of the next line (based on the current
    * text size) if the following character wouldn't fit entirely at the end of
    * the current line.
-   *
+
    * If wrap mode is disabled, characters will continue to be written to the
    * same line. A character at the right edge of the screen may only be
    * partially displayed and additional characters will be off screen.
@@ -1780,48 +1087,6 @@ class Arduboy2 : public Print, public Arduboy2Base
    * Clear the display buffer and set the text cursor to location 0, 0
    */
   void clear();
-
-  /** \brief
-   * The font used for text functions.
-   *
-   * \details
-   * This is a 5 pixel by 7 pixel font. Each character is actually coded as
-   * 8 pixels high to allow a 1 pixel descender below the baseline.
-   * Many symbols also use the 8th pixel. The library functions add a 1 pixel
-   * space after each character to separate them, so characters written at
-   * size 1 will occupy a 6 x 8 pixel area when drawn.
-   *
-   * The character set represented is code page 437, also known as OEM 437,
-   * OEM-US, PC-8 or DOS Latin US. This is an 8 bit set which includes all
-   * printable ASCII characters plus many accented characters, symbols and
-   * line drawing characters. 
-   *
-   * The data for this font is from file `glcdfont.c` in the
-   * [Adafruit GFX graphics library](https://github.com/adafruit/Adafruit-GFX-Library).
-   *
-   * \note
-   * \parblock
-   * With the library's text functions, the line drawing characters in the font
-   * won't touch on the left and right sides, as originally intended, because
-   * of the extra blank pixel added to the right of each character.
-   * \endparblock
-   *
-   * \note
-   * \parblock
-   * The library's text functions, except `drawChar()`, handle two character
-   * values specially (and thus the font symbols that they represent can't be
-   * displayed using these functions):
-   *
-   * - ASCII newline or line feed (`\n`, 0x0A, inverse white circle).
-   *   This will move the text cursor position to the start of the next line,
-   *   based on the current text size.
-   * - ASCII carriage return (`\r`, 0x0D, musical eighth note).
-   *   This character will be ignored.
-   * \endparblock
-   *
-   * \see Print write() readUnitName() writeUnitName()
-   */
-  static const PROGMEM uint8_t font5x7[];
 
  protected:
   int16_t cursor_x;

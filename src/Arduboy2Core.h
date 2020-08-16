@@ -7,9 +7,17 @@
 #ifndef ARDUBOY2_CORE_H
 #define ARDUBOY2_CORE_H
 
+
 #include <Arduino.h>
 #include <avr/power.h>
 #include <avr/sleep.h>
+#include <avr/wdt.h>
+#include <limits.h>
+
+#ifdef __AVR_ATmega328P__
+#warning SLIMBOY!
+#define SLIMBOY
+#endif
 
 
 // main hardware compile flags
@@ -37,6 +45,7 @@
 // ----- Arduboy pins -----
 #ifdef ARDUBOY_10
 
+#ifndef SLIMBOY
 #define PIN_CS 12       // Display CS Arduino pin number
 #define CS_PORT PORTD   // Display CS port
 #define CS_BIT PORTD6   // Display CS physical bit number
@@ -48,7 +57,22 @@
 #define PIN_RST 6       // Display reset Arduino pin number
 #define RST_PORT PORTD  // Display reset port
 #define RST_BIT PORTD7  // Display reset physical bit number
+#endif
 
+#ifdef SLIMBOY
+#define RED_LED 5   /**< The pin number for the red color in the RGB LED. */
+#define GREEN_LED 7 /**< The pin number for the greem color in the RGB LED. */
+#define BLUE_LED 6   /**< The pin number for the blue color in the RGB LED. */
+
+#define RED_LED_PORT PORTD
+#define RED_LED_BIT PORTD5
+
+#define GREEN_LED_PORT PORTD
+#define GREEN_LED_BIT PORTD7
+
+#define BLUE_LED_PORT PORTD
+#define BLUE_LED_BIT PORTD6
+#else
 #define RED_LED 10   /**< The pin number for the red color in the RGB LED. */
 #define GREEN_LED 11 /**< The pin number for the greem color in the RGB LED. */
 #define BLUE_LED 9   /**< The pin number for the blue color in the RGB LED. */
@@ -61,6 +85,7 @@
 
 #define BLUE_LED_PORT PORTB
 #define BLUE_LED_BIT PORTB5
+#endif
 
 // bit values for button states
 // these are determined by the buttonsState() function
@@ -70,6 +95,45 @@
 #define DOWN_BUTTON _BV(4)  /**< The Down button value for functions requiring a bitmask */
 #define A_BUTTON _BV(3)     /**< The A button value for functions requiring a bitmask */
 #define B_BUTTON _BV(2)     /**< The B button value for functions requiring a bitmask */
+
+#ifdef SLIMBOY
+#define PIN_LEFT_BUTTON 15
+#define LEFT_BUTTON_PORT PORTC
+#define LEFT_BUTTON_PORTIN PINC
+#define LEFT_BUTTON_DDR DDRC
+#define LEFT_BUTTON_BIT PORTC1
+
+#define PIN_RIGHT_BUTTON 3
+#define RIGHT_BUTTON_PORT PORTD
+#define RIGHT_BUTTON_PORTIN PIND
+#define RIGHT_BUTTON_DDR DDRD
+#define RIGHT_BUTTON_BIT PORTD3
+
+#define PIN_UP_BUTTON 17
+#define UP_BUTTON_PORT PORTC
+#define UP_BUTTON_PORTIN PINC
+#define UP_BUTTON_DDR DDRC
+#define UP_BUTTON_BIT PORTC3
+
+#define PIN_DOWN_BUTTON 2
+#define DOWN_BUTTON_PORT PORTD
+#define DOWN_BUTTON_PORTIN PIND
+#define DOWN_BUTTON_DDR DDRD
+#define DOWN_BUTTON_BIT PORTD2
+
+#define PIN_A_BUTTON 4
+#define A_BUTTON_PORT PORTD
+#define A_BUTTON_PORTIN PIND
+#define A_BUTTON_DDR DDRD
+#define A_BUTTON_BIT PORTD4
+
+#define PIN_B_BUTTON 16
+#define B_BUTTON_PORT PORTC
+#define B_BUTTON_PORTIN PINC
+#define B_BUTTON_DDR DDRC
+#define B_BUTTON_BIT PORTC2
+
+#else
 
 #define PIN_LEFT_BUTTON A2
 #define LEFT_BUTTON_PORT PORTF
@@ -106,7 +170,21 @@
 #define B_BUTTON_PORTIN PINB
 #define B_BUTTON_DDR DDRB
 #define B_BUTTON_BIT PORTB4
+#endif
 
+#ifdef SLIMBOY
+#define PIN_SPEAKER_1 9  /**< The pin number of the first lead of the speaker */
+#define PIN_SPEAKER_2 11 /**< The pin number of the second lead of the speaker */
+
+#define SPEAKER_1_PORT PORTB
+#define SPEAKER_1_DDR DDRB
+#define SPEAKER_1_BIT PORTB1
+
+#define SPEAKER_2_PORT PORTB
+#define SPEAKER_2_DDR DDRB
+#define SPEAKER_2_BIT PORTB3
+
+#else
 #define PIN_SPEAKER_1 5  /**< The pin number of the first lead of the speaker */
 #define PIN_SPEAKER_2 13 /**< The pin number of the second lead of the speaker */
 
@@ -117,6 +195,8 @@
 #define SPEAKER_2_PORT PORTC
 #define SPEAKER_2_DDR DDRC
 #define SPEAKER_2_BIT PORTC7
+#endif
+
 // -----------------------
 
 // ----- DevKit pins -----
@@ -133,6 +213,12 @@
 #define PIN_RST 12      // Display reset Arduino pin number
 #define RST_PORT PORTD  // Display reset port
 #define RST_BIT PORTD6  // Display reset physical bit number
+
+#define SPI_MOSI_PORT PORTB
+#define SPI_MOSI_BIT PORTB2
+
+#define SPI_SCK_PORT PORTB
+#define SPI_SCK_BIT PORTB1
 
 // map all LEDs to the single TX LED on DEVKIT
 #define RED_LED 17
@@ -202,7 +288,7 @@
 
 // ----- Pins common on Arduboy and DevKit -----
 
-// Unconnected analog input used for noise by generateRandomSeed()
+// Unconnected analog input used for noise by initRandomSeed()
 #define RAND_SEED_IN A4
 #define RAND_SEED_IN_PORT PORTF
 #define RAND_SEED_IN_BIT PORTF1
@@ -248,9 +334,9 @@
 /** \brief
  * Eliminate the USB stack to free up code space.
  *
- * \warning
- * Removing the USB code will make it impossible for sketch uploader
- * programs to automatically force a reset into the bootloader!
+ * \note
+ * **WARNING:** Removing the USB code will make it impossible for sketch
+ * uploader programs to automatically force a reset into the bootloader!
  * This means that a user will manually have to invoke a reset in order to
  * upload a new sketch, after one without USB has be been installed.
  * Be aware that the timing for the point that a reset must be initiated can
@@ -303,19 +389,9 @@
  */
 #define ARDUBOY_NO_USB int main() __attribute__ ((OS_main)); \
 int main() { \
-  Arduboy2NoUSB::mainNoUSB(); \
+  Arduboy2Core::mainNoUSB(); \
   return 0; \
 }
-
-// A replacement for the Arduino main() function that eliminates the USB code.
-// Used by the ARDUBOY_NO_USB macro.
-class Arduboy2NoUSB
-{
-  friend int main();
-
-  private:
-    static void mainNoUSB();
-};
 
 
 /** \brief
@@ -332,7 +408,7 @@ class Arduboy2NoUSB
  * that this may eliminate the need to create an entire local copy of the
  * library, in order to extend the functionality, in most circumstances.
  */
-class Arduboy2Core : public Arduboy2NoUSB
+class Arduboy2Core
 {
   friend class Arduboy2Ex;
 
@@ -349,7 +425,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      * app should be able to sleep maybe half the time in between rendering
      * it's own frames.
      */
-    static void idle();
+    void static idle();
 
     /** \brief
      * Put the display into data mode.
@@ -365,7 +441,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see LCDCommandMode() SPItransfer()
      */
-    static void LCDDataMode();
+    void static LCDDataMode();
 
     /** \brief
      * Put the display into command mode.
@@ -389,7 +465,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see LCDDataMode() sendLCDCommand() SPItransfer()
      */
-    static void LCDCommandMode();
+    void static LCDCommandMode();
 
     /** \brief
      * Transfer a byte to the display.
@@ -402,31 +478,9 @@ class Arduboy2Core : public Arduboy2NoUSB
      * or as data to be placed on the screen, depending on the command/data
      * mode.
      *
-     * \see LCDDataMode() LCDCommandMode() sendLCDCommand() SPItransferAndRead()
+     * \see LCDDataMode() LCDCommandMode() sendLCDCommand()
      */
-    static void SPItransfer(uint8_t data);
-
-    /** \brief
-     * Transfer a byte to, and read a byte from, the SPI bus.
-     *
-     * \param data The byte to be sent.
-     *
-     * \return The byte that was received.
-     *
-     * \details
-     * This function does the same as the `SPItransfer()` function but also
-     * reads and returns the byte of data that was received during the
-     * transfer.
-     *
-     * This function is of no use for a standard Arduboy, since only the
-     * display is connected to the SPI bus and data cannot be received from
-     * the display. It has been provided for use with homemade or expanded
-     * units that have had additional peripherals added to the SPI bus that
-     * are capable of sending data.
-     *
-     * \see SPItransfer()
-     */
-    static uint8_t SPItransferAndRead(uint8_t data);
+    void static SPItransfer(uint8_t data);
 
     /** \brief
      * Turn the display off.
@@ -439,7 +493,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see displayOn()
      */
-    static void displayOff();
+    void static displayOff();
 
     /** \brief
      * Turn the display on.
@@ -455,21 +509,29 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see displayOff()
      */
-    static void displayOn();
+    void static displayOn();
 
     /** \brief
      * Get the width of the display in pixels.
      *
      * \return The width of the display in pixels.
+     *
+     * \note
+     * In most cases, the defined value `WIDTH` would be better to use instead
+     * of this function.
      */
-    static constexpr uint8_t width() { return WIDTH; }
+    uint8_t static width();
 
     /** \brief
      * Get the height of the display in pixels.
      *
      * \return The height of the display in pixels.
+     *
+     * \note
+     * In most cases, the defined value `HEIGHT` would be better to use instead
+     * of this function.
      */
-    static constexpr uint8_t height() { return HEIGHT; }
+    uint8_t static height();
 
     /** \brief
      * Get the current state of all buttons as a bitmask.
@@ -484,7 +546,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * LEFT_BUTTON, RIGHT_BUTTON, UP_BUTTON, DOWN_BUTTON, A_BUTTON, B_BUTTON
      */
-    static uint8_t buttonsState();
+    uint8_t static buttonsState();
 
     /** \brief
      * Paint 8 pixels vertically to the display.
@@ -516,7 +578,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *     . . . . . . . . (end of page 1)  X . X . . . . . (end of page 1)
      *     . . . . . . . . (page 2)         . . . . . . . . (page 2)
      */
-    static void paint8Pixels(uint8_t pixels);
+    void static paint8Pixels(uint8_t pixels);
 
     /** \brief
      * Paints an entire image directly to the display from program memory.
@@ -534,7 +596,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see paint8Pixels()
      */
-    static void paintScreen(const uint8_t *image);
+    void static paintScreen(const uint8_t *image);
 
     /** \brief
      * Paints an entire image directly to the display from an array in RAM.
@@ -558,7 +620,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see paint8Pixels()
      */
-    static void paintScreen(uint8_t image[], bool clear = false);
+    void static paintScreen(uint8_t image[], bool clear = false);
 
     /** \brief
      * Blank the display screen by setting all pixels off.
@@ -567,7 +629,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      * All pixels on the screen will be written with a value of 0 to turn
      * them off.
      */
-    static void blank();
+    void static blank();
 
     /** \brief
      * Invert the entire display or set it back to normal.
@@ -584,7 +646,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      * until it is set back to non-inverted mode by calling this function with
      * `false`.
      */
-    static void invert(bool inverse);
+    void static invert(bool inverse);
 
     /** \brief
      * Turn all display pixels on or display the buffer contents.
@@ -605,7 +667,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see invert()
      */
-    static void allPixelsOn(bool on);
+    void static allPixelsOn(bool on);
 
     /** \brief
      * Flip the display vertically or set it back to normal.
@@ -623,7 +685,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see flipHorizontal()
      */
-    static void flipVertical(bool flipped);
+    void static flipVertical(bool flipped);
 
     /** \brief
      * Flip the display horizontally or set it back to normal.
@@ -641,7 +703,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see flipVertical()
      */
-    static void flipHorizontal(bool flipped);
+    void static flipHorizontal(bool flipped);
 
     /** \brief
      * Send a single command byte to the display.
@@ -657,7 +719,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      * Sending improper commands to the display can place it into invalid or
      * unexpected states, possibly even causing physical damage.
      */
-    static void sendLCDCommand(uint8_t command);
+    void static sendLCDCommand(uint8_t command);
 
     /** \brief
      * Set the light output of the RGB LED.
@@ -691,7 +753,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see setRGBled(uint8_t, uint8_t) digitalWriteRGB() freeRGBled()
      */
-    static void setRGBled(uint8_t red, uint8_t green, uint8_t blue);
+    void static setRGBled(uint8_t red, uint8_t green, uint8_t blue);
 
     /** \brief
      * Set the brightness of one of the RGB LEDs without affecting the others.
@@ -713,7 +775,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see setRGBled(uint8_t, uint8_t, uint8_t) digitalWriteRGB() freeRGBled()
      */
-    static void setRGBled(uint8_t color, uint8_t val);
+    void static setRGBled(uint8_t color, uint8_t val);
 
 
     /** \brief
@@ -726,7 +788,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see digitalWriteRGB() setRGBled()
      */
-    static void freeRGBled();
+    void static freeRGBled();
 
     /** \brief
      * Set the RGB LEDs digitally, to either fully on or fully off.
@@ -741,16 +803,16 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * The colors are as follows:
      *
-     * | RED LED | GREEN LED | BLUE LED |  COLOR  |
-     * | ------- | --------- | -------- | :-----: |
-     * | RGB_OFF |  RGB_OFF  | RGB_OFF  | OFF     |
-     * | RGB_OFF |  RGB_OFF  | RGB_ON   | Blue    |
-     * | RGB_OFF |  RGB_ON   | RGB_OFF  | Green   |
-     * | RGB_OFF |  RGB_ON   | RGB_ON   | Cyan    |
-     * | RGB_ON  |  RGB_OFF  | RGB_OFF  | Red     |
-     * | RGB_ON  |  RGB_OFF  | RGB_ON   | Magenta |
-     * | RGB_ON  |  RGB_ON   | RGB_OFF  | Yellow  |
-     * | RGB_ON  |  RGB_ON   | RGB_ON   | White   |
+     *     RED LED   GREEN_LED   BLUE_LED   COLOR
+     *     -------   ---------  --------    -----
+     *     RGB_OFF    RGB_OFF    RGB_OFF    OFF
+     *     RGB_OFF    RGB_OFF    RGB_ON     Blue
+     *     RGB_OFF    RGB_ON     RGB_OFF    Green
+     *     RGB_OFF    RGB_ON     RGB_ON     Cyan
+     *     RGB_ON     RGB_OFF    RGB_OFF    Red
+     *     RGB_ON     RGB_OFF    RGB_ON     Magenta
+     *     RGB_ON     RGB_ON     RGB_OFF    Yellow
+     *     RGB_ON     RGB_ON     RGB_ON     White
      *
      * \note
      * \parblock
@@ -771,7 +833,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see digitalWriteRGB(uint8_t, uint8_t) setRGBled() freeRGBled()
      */
-    static void digitalWriteRGB(uint8_t red, uint8_t green, uint8_t blue);
+    void static digitalWriteRGB(uint8_t red, uint8_t green, uint8_t blue);
 
     /** \brief
      * Set one of the RGB LEDs digitally, to either fully on or fully off.
@@ -789,7 +851,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see digitalWriteRGB(uint8_t, uint8_t, uint8_t) setRGBled() freeRGBled()
      */
-    static void digitalWriteRGB(uint8_t color, uint8_t val);
+    void static digitalWriteRGB(uint8_t color, uint8_t val);
 
     /** \brief
      * Initialize the Arduboy's hardware.
@@ -806,7 +868,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see Arduboy2Base::begin()
      */
-    static void boot();
+    void static boot();
 
     /** \brief
      * Allow upload when the bootloader "magic number" could be corrupted.
@@ -827,26 +889,7 @@ class Arduboy2Core : public Arduboy2NoUSB
      *
      * \see Arduboy2Base::flashlight() boot()
      */
-    static void safeMode();
 
-    /** \brief
-     * Create a seed suitable for use with a pseudorandom number generator.
-     *
-     * \return A random value that can be used to seed a
-     * pseudorandom number generator.
-     *
-     * \details
-     * The returned value will be a random value derived from entropy from an
-     * ADC reading of a floating pin combined with the microseconds since boot.
-     *
-     * \note
-     * This function will be more effective if called after a semi-random time,
-     * such as after waiting for the user to press a button to start a game, or
-     * another event that takes a variable amount of time after boot.
-     *
-     * \see Arduboy2Base::initRandomSeed()
-     */
-    static unsigned long generateRandomSeed();
 
     /** \brief
      * Delay for the number of milliseconds, specified as a 16 bit value.
@@ -859,35 +902,12 @@ class Arduboy2Core : public Arduboy2NoUSB
      * 65535 milliseconds (about 65.5 seconds). Using this function instead
      * of Arduino `delay()` will save a few bytes of code.
      */
-    static void delayShort(uint16_t ms) __attribute__ ((noinline));
-
-    /** \brief
-     * Exit the sketch and start the bootloader
-     *
-     * \details
-     * The sketch will exit and the bootloader will be started in command mode.
-     * The effect will be similar to pressing the reset button.
-     *
-     * This function is intended to be used to allow uploading a new sketch,
-     * when the USB code has been removed to gain more code space.
-     * Ideally, the sketch would present a "New Sketch Upload" menu or prompt
-     * telling the user to "Press and hold the DOWN button when the procedure
-     * to upload a new sketch has been initiated". The sketch would then wait
-     * for the DOWN button to be pressed and then call this function.
-     *
-     * \see ARDUBOY_NO_USB
-     */
-    static void exitToBootloader();
-
+    void static delayShort(uint16_t ms) __attribute__ ((noinline));
   protected:
     // internals
-    static void setCPUSpeed8MHz();
-    static void bootSPI();
-    static void bootOLED();
-    static void bootPins();
-    static void bootPowerSaving();
-
-    static const PROGMEM uint8_t lcdBootProgram[];
+    void static setCPUSpeed8MHz();
+    void static bootOLED();
+    void static bootPowerSaving();
 };
 
 #endif
